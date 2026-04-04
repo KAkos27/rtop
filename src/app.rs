@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{time::Duration, usize};
 
 use crossterm::event::{self, KeyCode, poll};
 use ratatui::{
@@ -7,7 +7,7 @@ use ratatui::{
     style::{Color, Style, Stylize},
     widgets::{Block, Borders, Gauge, Row, Table, TableState},
 };
-use sysinfo::{Disks, System};
+use sysinfo::{Disks, Signal, System};
 
 use crate::system_information::SystemInformation;
 
@@ -70,10 +70,8 @@ impl App {
             .footer(footer.italic())
             .column_spacing(1)
             .style(Color::White)
-            .row_highlight_style(Style::new().on_black().bold())
-            .column_highlight_style(Color::Gray)
-            .cell_highlight_style(Style::new().reversed().yellow())
-            .highlight_symbol("🍴 ");
+            .row_highlight_style(Style::new().on_black().bold().light_blue())
+            .highlight_symbol(" > ");
 
         frame.render_stateful_widget(table, area, &mut self.table_state);
     }
@@ -127,6 +125,16 @@ impl App {
         // current_chunk_index += 1;
     }
 
+    fn kill_process(&self) {
+        if let Some(selected_index) = self.table_state.selected() {
+            if let Some(selected_process) = self.system_information.processes.get(selected_index) {
+                if let Some(process) = self.system.process(selected_process.pid) {
+                    process.kill_with(Signal::Kill);
+                }
+            }
+        }
+    }
+
     fn check_for_input(&mut self) -> std::io::Result<()> {
         if poll(Duration::from_millis(50))? {
             if let Some(key) = event::read()?.as_key_press_event() {
@@ -134,6 +142,7 @@ impl App {
                     KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
                     KeyCode::Char('j') | KeyCode::Down => self.table_state.select_next(),
                     KeyCode::Char('k') | KeyCode::Up => self.table_state.select_previous(),
+                    KeyCode::Char('x') | KeyCode::Backspace => self.kill_process(),
                     KeyCode::Char('g') => self.table_state.select_first(),
                     KeyCode::Char('G') => self.table_state.select_last(),
                     _ => {}

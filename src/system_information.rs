@@ -1,7 +1,7 @@
-use sysinfo::{Disks, System};
+use sysinfo::{Disks, Pid, System};
 
 pub struct ProcessInfo {
-    pub pid: String,
+    pub pid: Pid,
     pub name: String,
     pub cpu_usage: f32,
     pub memory_usage: u64,
@@ -54,7 +54,7 @@ fn get_process_info(sys: &System) -> Vec<ProcessInfo> {
     sys.processes()
         .iter()
         .map(|(pid, process)| ProcessInfo {
-            pid: pid.to_string(),
+            pid: *pid,
             name: process.name().to_string_lossy().to_string(),
             cpu_usage: process.cpu_usage(),
             memory_usage: process.memory(),
