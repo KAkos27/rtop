@@ -2,6 +2,7 @@ use crate::app::App;
 
 mod app;
 mod system_information;
+mod ui;
 
 fn main() -> color_eyre::Result<()> {
     let mut app: App = App::init();

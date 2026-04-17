@@ -1,10 +1,15 @@
 use sysinfo::{Disks, Pid, System};
 
-pub struct ProcessInfo {
+pub struct ProcessInformation {
     pub pid: Pid,
     pub name: String,
     pub cpu_usage: f32,
     pub memory_usage: u64,
+}
+
+pub struct CpuInfromation {
+    pub percentage: u16,
+    pub cores: Vec<f32>,
 }
 
 pub struct DiskInformation {
@@ -13,14 +18,17 @@ pub struct DiskInformation {
 }
 
 pub struct SystemInformation {
-    pub cpu: f64,
+    pub cpu_information: CpuInfromation,
     pub memory: f64,
     pub disk: Vec<DiskInformation>,
-    pub processes: Vec<ProcessInfo>,
+    pub processes: Vec<ProcessInformation>,
 }
 
-fn get_cpu_percentage(sys: &System) -> f64 {
-    return sys.global_cpu_usage() as f64;
+fn get_cpu_info(sys: &System) -> CpuInfromation {
+    CpuInfromation {
+        percentage: sys.global_cpu_usage() as u16,
+        cores: sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect(),
+    }
 }
 
 fn get_memory_percentage(sys: &System) -> f64 {
@@ -50,10 +58,10 @@ fn get_disks_info(disks: &Disks) -> Vec<DiskInformation> {
     result
 }
 
-fn get_process_info(sys: &System) -> Vec<ProcessInfo> {
+fn get_process_info(sys: &System) -> Vec<ProcessInformation> {
     sys.processes()
         .iter()
-        .map(|(pid, process)| ProcessInfo {
+        .map(|(pid, process)| ProcessInformation {
             pid: *pid,
             name: process.name().to_string_lossy().to_string(),
             cpu_usage: process.cpu_usage(),
@@ -65,7 +73,7 @@ fn get_process_info(sys: &System) -> Vec<ProcessInfo> {
 impl SystemInformation {
     pub fn get_system_info(sys: &System, disks: &Disks) -> Self {
         SystemInformation {
-            cpu: get_cpu_percentage(sys),
+            cpu_information: get_cpu_info(sys),
             memory: get_memory_percentage(sys),
             disk: get_disks_info(disks),
             processes: get_process_info(sys),

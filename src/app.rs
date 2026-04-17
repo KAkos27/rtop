@@ -1,15 +1,12 @@
-use std::{time::Duration, usize};
-
 use crossterm::event::{self, KeyCode, poll};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Stylize},
-    widgets::{Block, Borders, Gauge, Row, Table, TableState},
+    widgets::TableState,
 };
-use sysinfo::{Disks, Signal, System};
+use sysinfo::{Disks, MINIMUM_CPU_UPDATE_INTERVAL, Signal, System};
 
-use crate::system_information::SystemInformation;
+use crate::{system_information::SystemInformation, ui};
 
 pub struct App {
     system_information: SystemInformation,
@@ -43,86 +40,91 @@ impl App {
         Ok(())
     }
 
-    fn render_processes_table(&mut self, frame: &mut Frame, area: Rect) {
-        let header = Row::new(["PID", "Name", "CPU usage", "Memory usage"])
-            .style(Style::new().bold())
-            .bottom_margin(1);
+    fn render_top(&mut self, frame: &mut Frame, chunk: Rect) {
+        let top_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Ratio(2, 3), Constraint::Ratio(1, 3)])
+            .split(chunk);
 
-        let rows = self.system_information.processes.iter().map(|p| {
-            Row::new([
-                p.pid.to_string(),
-                p.name.to_string(),
-                p.cpu_usage.to_string(),
-                p.memory_usage.to_string(),
-            ])
-        });
+        frame.render_widget(
+            ui::create_cpu_widget(self.system_information.cpu_information.percentage),
+            top_chunks[0],
+        );
 
-        let footer = Row::new(["Showing the first 25 processes", ""]);
-        let widths = [
-            Constraint::Percentage(20),
-            Constraint::Percentage(50),
-            Constraint::Percentage(10),
-            Constraint::Percentage(20),
-        ];
+        let cores = &self.system_information.cpu_information.cores;
+        const COLS: usize = 2;
+        let col_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Ratio(1, COLS as u32); COLS])
+            .split(top_chunks[1]);
 
-        let table = Table::new(rows, widths)
-            .header(header)
-            .footer(footer.italic())
-            .column_spacing(1)
-            .style(Color::White)
-            .row_highlight_style(Style::new().on_black().bold().light_blue())
-            .highlight_symbol(" > ");
+        for col in 0..COLS {
+            let col_cores: Vec<(usize, f32)> = cores
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| i % COLS == col)
+                .map(|(i, &v)| (i, v))
+                .collect();
 
-        frame.render_stateful_widget(table, area, &mut self.table_state);
+            let row_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(vec![Constraint::Length(3); col_cores.len()])
+                .split(col_chunks[col]);
+
+            for (row, (i, usage)) in col_cores.iter().enumerate() {
+                frame.render_widget(
+                    ui::create_core_gauge(format!("C{i}"), *usage as u16),
+                    row_chunks[row],
+                );
+            }
+        }
+    }
+
+    fn render_bottom(&mut self, frame: &mut Frame, chunk: Rect) {
+        let bottom_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(chunk);
+
+        let mut left_constraints = vec![Constraint::Length(3)];
+        for _ in &self.system_information.disk {
+            left_constraints.push(Constraint::Length(3));
+        }
+        let left_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(left_constraints)
+            .split(bottom_chunks[0]);
+
+        frame.render_widget(
+            ui::create_memory_widget(self.system_information.memory as u16),
+            left_chunks[0],
+        );
+        for (i, disk) in self.system_information.disk.iter().enumerate() {
+            frame.render_widget(
+                ui::create_disk_widget(disk.name.as_str(), disk.percent as u16),
+                left_chunks[i + 1],
+            );
+        }
+
+        self.render_process_table(frame, bottom_chunks[1]);
+    }
+
+    fn render_process_table(&mut self, frame: &mut Frame, chunk: Rect) {
+        let table = ui::create_processes_table(&self.system_information.processes);
+        frame.render_stateful_widget(table, chunk, &mut self.table_state);
     }
 
     fn render(&mut self, frame: &mut Frame) {
-        let mut constraints: Vec<Constraint> = vec![Constraint::Length(3), Constraint::Length(3)];
-        let mut current_chunk_index: usize = 0;
+        let core_count = self.system_information.cpu_information.cores.len() as u16;
+        let top_height = ((core_count + 1) / 2 * 3).max(3);
 
-        for _ in self.system_information.disk.iter() {
-            constraints.push(Constraint::Length(3));
-        }
-
-        constraints.push(Constraint::Min(0));
-
-        let chunks = Layout::default()
+        let main_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(constraints)
+            .constraints([Constraint::Length(top_height), Constraint::Min(0)])
             .split(frame.area());
 
-        frame.render_widget(
-            Gauge::default()
-                .block(Block::default().title("CPU").borders(Borders::ALL))
-                .percent(self.system_information.cpu as u16),
-            chunks[current_chunk_index],
-        );
-        current_chunk_index += 1;
-
-        frame.render_widget(
-            Gauge::default()
-                .block(Block::default().title("MEMORY").borders(Borders::ALL))
-                .percent(self.system_information.memory as u16),
-            chunks[current_chunk_index],
-        );
-        current_chunk_index += 1;
-
-        for disk in self.system_information.disk.iter() {
-            frame.render_widget(
-                Gauge::default()
-                    .block(
-                        Block::default()
-                            .title(disk.name.as_str())
-                            .borders(Borders::ALL),
-                    )
-                    .percent(disk.percent as u16),
-                chunks[current_chunk_index],
-            );
-            current_chunk_index += 1;
-        }
-
-        self.render_processes_table(frame, chunks[current_chunk_index]);
-        // current_chunk_index += 1;
+        self.render_top(frame, main_chunks[0]);
+        self.render_bottom(frame, main_chunks[1]);
     }
 
     fn kill_process(&self) {
@@ -136,7 +138,7 @@ impl App {
     }
 
     fn check_for_input(&mut self) -> std::io::Result<()> {
-        if poll(Duration::from_millis(50))? {
+        if poll(MINIMUM_CPU_UPDATE_INTERVAL)? {
             if let Some(key) = event::read()?.as_key_press_event() {
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => self.should_quit = true,
