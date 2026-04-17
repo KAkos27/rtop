@@ -1,12 +1,10 @@
 use ratatui::{
     layout::Constraint,
     style::{Color, Style},
-    widgets::{Block, Borders, Gauge, Row, Table},
+    widgets::{Block, Borders, Cell, Gauge, Row, Table},
 };
 
 use crate::system_information::ProcessInformation;
-
-const HEADER_CELLS: [&str; 4] = ["PID", "Name", "CPU usage", "Memory usage"];
 
 pub fn create_disk_widget<'a>(name: &'a str, percent: u16) -> Gauge<'a> {
     Gauge::default()
@@ -32,7 +30,10 @@ pub fn create_memory_widget<'a>(percent: u16) -> Gauge<'a> {
         .percent(percent)
 }
 
-pub fn create_processes_table<'a>(process_info: &Vec<ProcessInformation>) -> Table<'a> {
+pub fn create_processes_table<'a>(
+    process_info: &Vec<ProcessInformation>,
+    sort_by_cpu: bool,
+) -> Table<'a> {
     let rows = process_info.iter().map(|p| {
         Row::new([
             p.pid.to_string(),
@@ -41,9 +42,24 @@ pub fn create_processes_table<'a>(process_info: &Vec<ProcessInformation>) -> Tab
             p.memory_usage.to_string(),
         ])
     });
-    let header = Row::new(HEADER_CELLS)
-        .style(Style::new().bold())
-        .bottom_margin(1);
+
+    let mut cpu_color: Color = Color::White;
+    let mut memory_color: Color = Color::White;
+
+    if sort_by_cpu {
+        cpu_color = Color::Blue;
+    } else {
+        memory_color = Color::Blue;
+    }
+
+    let header_cells = vec![
+        Cell::from("PID").style(Style::new().bold()),
+        Cell::from("Name").style(Style::new().bold()),
+        Cell::from("CPU usage").style(Style::new().bold().fg(cpu_color)),
+        Cell::from("Memory usage").style(Style::new().bold().fg(memory_color)),
+    ];
+
+    let header = Row::new(header_cells).bottom_margin(1);
 
     let widths = [
         Constraint::Percentage(20),

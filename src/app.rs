@@ -13,6 +13,7 @@ pub struct App {
     system: System,
     disks: Disks,
     should_quit: bool,
+    sort_by_cpu: bool,
     table_state: TableState,
 }
 
@@ -27,6 +28,7 @@ impl App {
             system,
             disks,
             should_quit: false,
+            sort_by_cpu: true,
             table_state: TableState::default(),
         };
         app.table_state.select_first();
@@ -110,7 +112,8 @@ impl App {
     }
 
     fn render_process_table(&mut self, frame: &mut Frame, chunk: Rect) {
-        let table = ui::create_processes_table(&self.system_information.processes);
+        let table =
+            ui::create_processes_table(&self.system_information.processes, self.sort_by_cpu);
         frame.render_stateful_widget(table, chunk, &mut self.table_state);
     }
 
@@ -137,6 +140,18 @@ impl App {
         }
     }
 
+    fn sort(&mut self) {
+        if self.sort_by_cpu {
+            self.system_information
+                .processes
+                .sort_by(|a, b| b.cpu_usage.total_cmp(&a.cpu_usage));
+        } else {
+            self.system_information
+                .processes
+                .sort_by(|a, b| b.memory_usage.cmp(&a.memory_usage));
+        }
+    }
+
     fn check_for_input(&mut self) -> std::io::Result<()> {
         if poll(MINIMUM_CPU_UPDATE_INTERVAL)? {
             if let Some(key) = event::read()?.as_key_press_event() {
@@ -147,6 +162,7 @@ impl App {
                     KeyCode::Char('x') | KeyCode::Backspace => self.kill_process(),
                     KeyCode::Char('g') => self.table_state.select_first(),
                     KeyCode::Char('G') => self.table_state.select_last(),
+                    KeyCode::Char('s') => self.sort_by_cpu = !self.sort_by_cpu,
                     _ => {}
                 }
             }
@@ -158,6 +174,7 @@ impl App {
         while !self.should_quit {
             self.system.refresh_all();
             self.system_information = SystemInformation::get_system_info(&self.system, &self.disks);
+            self.sort();
             terminal.draw(|frame| self.render(frame))?;
             self.check_for_input()?;
         }
