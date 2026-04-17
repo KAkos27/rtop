@@ -1,7 +1,7 @@
 use ratatui::{
     layout::Constraint,
     style::{Color, Style},
-    widgets::{Block, Borders, Cell, Gauge, Row, Table},
+    widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table},
 };
 
 use crate::system_information::ProcessInformation;
@@ -28,6 +28,14 @@ pub fn create_memory_widget<'a>(percent: u16) -> Gauge<'a> {
     Gauge::default()
         .block(Block::default().title("MEMORY").borders(Borders::ALL))
         .percent(percent)
+}
+
+pub fn create_input_widget(input: &str) -> Paragraph<'_> {
+    Paragraph::new(input).block(
+        Block::default()
+            .title("Filter (f - filter, c - clear)")
+            .borders(Borders::ALL),
+    )
 }
 
 pub fn create_processes_table<'a>(
