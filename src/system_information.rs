@@ -1,5 +1,6 @@
 use sysinfo::{Disks, Pid, System};
 
+#[derive(Clone)]
 pub struct ProcessInformation {
     pub pid: Pid,
     pub name: String,

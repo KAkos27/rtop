@@ -18,7 +18,7 @@ pub struct App {
     system: System,
     disks: Disks,
     should_quit: bool,
-    should_sort: bool,
+    should_refresh: bool,
     sort_by_cpu: bool,
     table_state: TableState,
     input: String,
@@ -38,7 +38,7 @@ impl App {
             system,
             disks,
             should_quit: false,
-            should_sort: true,
+            should_refresh: true,
             sort_by_cpu: true,
             table_state: TableState::default(),
             input: String::new(),
@@ -89,9 +89,18 @@ impl App {
 
     fn submit_message(&mut self) {
         self.messages = self.input.clone();
-        self.input.clear();
+        self.input_mode = InputMode::Normal;
         self.reset_cursor();
-        self.should_sort = true;
+
+        self.system_information.processes = self
+            .system_information
+            .processes
+            .iter()
+            .filter(|process| process.name.contains(&self.input))
+            .cloned()
+            .collect();
+
+        self.should_refresh = false;
     }
 
     fn move_cursor_left(&mut self) {
@@ -224,28 +233,25 @@ impl App {
     }
 
     fn sort(&mut self) {
-        if self.should_sort {
-            if self.sort_by_cpu {
-                self.system_information
-                    .processes
-                    .sort_by(|a, b| b.cpu_usage.total_cmp(&a.cpu_usage));
-            } else {
-                self.system_information
-                    .processes
-                    .sort_by(|a, b| b.memory_usage.cmp(&a.memory_usage));
-            }
+        if self.sort_by_cpu {
+            self.system_information
+                .processes
+                .sort_by(|a, b| b.cpu_usage.total_cmp(&a.cpu_usage));
+        } else {
+            self.system_information
+                .processes
+                .sort_by(|a, b| b.memory_usage.cmp(&a.memory_usage));
         }
     }
 
-    fn enter_insert_mode(&mut self) {
-        self.should_sort = false;
+    fn enter_editing_mode(&mut self) {
         self.input_mode = InputMode::Editing;
     }
 
-    fn escape_insert_mode(&mut self) {
+    fn reset_searchbar(&mut self) {
         self.input = String::new();
-        self.should_sort = true;
         self.input_mode = InputMode::Normal;
+        self.should_refresh = true;
     }
 
     fn check_for_input(&mut self) -> std::io::Result<()> {
@@ -260,7 +266,8 @@ impl App {
                         KeyCode::Char('g') => self.table_state.select_first(),
                         KeyCode::Char('G') => self.table_state.select_last(),
                         KeyCode::Char('s') => self.sort_by_cpu = !self.sort_by_cpu,
-                        KeyCode::Char('f') => self.enter_insert_mode(),
+                        KeyCode::Char('f') => self.enter_editing_mode(),
+                        KeyCode::Char('c') => self.reset_searchbar(),
                         _ => {}
                     },
                     InputMode::Editing if key.kind == KeyEventKind::Press => match key.code {
@@ -269,7 +276,7 @@ impl App {
                         KeyCode::Backspace => self.delete_char(),
                         KeyCode::Left => self.move_cursor_left(),
                         KeyCode::Right => self.move_cursor_right(),
-                        KeyCode::Esc => self.escape_insert_mode(),
+                        KeyCode::Esc => self.reset_searchbar(),
                         _ => {}
                     },
                     InputMode::Editing => {}
@@ -282,7 +289,10 @@ impl App {
     fn app(&mut self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
         while !self.should_quit {
             self.system.refresh_all();
-            self.system_information = SystemInformation::get_system_info(&self.system, &self.disks);
+            if self.should_refresh {
+                self.system_information =
+                    SystemInformation::get_system_info(&self.system, &self.disks);
+            }
             self.sort();
             terminal.draw(|frame| self.render(frame))?;
             self.check_for_input()?;

@@ -30,7 +30,7 @@ pub fn create_memory_widget<'a>(percent: u16) -> Gauge<'a> {
         .percent(percent)
 }
 
-pub fn create_input_widget(input: &str) -> Paragraph<'_> {
+pub fn create_input_widget<'a>(input: &'a str) -> Paragraph<'a> {
     Paragraph::new(input).block(
         Block::default()
             .title("Filter (f - filter, c - clear)")
