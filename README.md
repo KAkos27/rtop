@@ -62,7 +62,7 @@
 **Prerequisites:** [Rust toolchain](https://rustup.rs/)
 
 ```bash
-git clone https://github.com/yourusername/rtop
+git clone https://github.com/KAkos27/rtop
 cd rtop
 cargo build --release
 ./target/release/rtop
