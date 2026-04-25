@@ -18,13 +18,11 @@ pub struct App {
     system: System,
     disks: Disks,
     should_quit: bool,
-    should_refresh: bool,
     sort_by_cpu: bool,
     table_state: TableState,
     input: String,
     character_index: usize,
     input_mode: InputMode,
-    messages: String,
 }
 
 impl App {
@@ -38,12 +36,10 @@ impl App {
             system,
             disks,
             should_quit: false,
-            should_refresh: true,
             sort_by_cpu: true,
             table_state: TableState::default(),
             input: String::new(),
             input_mode: InputMode::Normal,
-            messages: String::new(),
             character_index: 0,
         };
         app.table_state.select_first();
@@ -88,19 +84,8 @@ impl App {
     }
 
     fn submit_message(&mut self) {
-        self.messages = self.input.clone();
         self.input_mode = InputMode::Normal;
         self.reset_cursor();
-
-        self.system_information.processes = self
-            .system_information
-            .processes
-            .iter()
-            .filter(|process| process.name.contains(&self.input))
-            .cloned()
-            .collect();
-
-        self.should_refresh = false;
     }
 
     fn move_cursor_left(&mut self) {
@@ -190,7 +175,10 @@ impl App {
             .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(bottom_chunks[1]);
 
-        frame.render_widget(ui::create_input_widget(&self.input), right_chunks[0]);
+        frame.render_widget(
+            ui::create_input_widget(&self.input, matches!(self.input_mode, InputMode::Editing)),
+            right_chunks[0],
+        );
         match self.input_mode {
             InputMode::Normal => {}
 
@@ -251,7 +239,6 @@ impl App {
     fn reset_searchbar(&mut self) {
         self.input = String::new();
         self.input_mode = InputMode::Normal;
-        self.should_refresh = true;
     }
 
     fn check_for_input(&mut self) -> std::io::Result<()> {
@@ -286,14 +273,29 @@ impl App {
         Ok(())
     }
 
+    fn check_for_filter(&mut self) {
+        if !self.input.is_empty() {
+            self.system_information.processes = self
+                .system_information
+                .processes
+                .iter()
+                .filter(|process| {
+                    process
+                        .name
+                        .to_lowercase()
+                        .contains(&self.input.to_lowercase())
+                })
+                .cloned()
+                .collect();
+        }
+    }
+
     fn app(&mut self, terminal: &mut DefaultTerminal) -> std::io::Result<()> {
         while !self.should_quit {
             self.system.refresh_all();
-            if self.should_refresh {
-                self.system_information =
-                    SystemInformation::get_system_info(&self.system, &self.disks);
-            }
+            self.system_information = SystemInformation::get_system_info(&self.system, &self.disks);
             self.sort();
+            self.check_for_filter();
             terminal.draw(|frame| self.render(frame))?;
             self.check_for_input()?;
         }
